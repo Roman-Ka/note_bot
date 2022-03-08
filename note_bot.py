@@ -6,9 +6,32 @@ from telegram.ext import CallbackQueryHandler, CallbackContext, MessageHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 
 
+class LinkNoteHandler:
+
+    def __init__(self, path):
+        self._folder_path = os.path.abspath(path)
+
+    def get_links(self):
+        with open(os.path.join(self._folder_path, 'links.md'), 'r') as f:
+            links_note = f.read()
+        return links_note
+
+    @property
+    def categories(self):
+        contents = self.get_links()
+        # Find names of all categories from the whole doc
+        proj_names = contents.split('\n## ')
+        # split for the first 'word'
+        proj_names = [x.split('\n')[0] for x in proj_names[1:]]
+        return proj_names
+
+
 class Bot:
 
     def __init__(self, token):
+        self._note_handler = LinkNoteHandler(
+            path=os.environ['PATH_TO_NOTES']
+        )
 
         updater = Updater(token, use_context=True)
         dp = updater.dispatcher
@@ -22,7 +45,7 @@ class Bot:
         # on non command i.e message - echo the message on Telegram
         dp.add_handler(MessageHandler(
             Filters.text & ~Filters.command,
-            self.echo
+            self.receive_message
             ))
 
         print('bot has started')
@@ -31,9 +54,16 @@ class Bot:
 
         updater.idle()
 
-    def echo(self, update: Update, context: CallbackContext) -> None:
+    def receive_message(self,
+                        update: Update,
+                        context: CallbackContext) -> None:
         """Echo the user message."""
-        update.message.reply_text(update.message.text)
+        if 'http' in update.message.text:
+            update.message.reply_text(
+                'Link:category',
+                reply_markup=self.link_categories_menu()
+            )
+        self.current_link = update.message.text
 
     def start(self, update: Update, context: CallbackContext):
         update.message.reply_text(
@@ -65,36 +95,23 @@ class Bot:
             reply_markup=self.second_menu_keyboard()
         )
 
-    def second_menu_keyboard(self):
+    def link_categories_menu(self):
         keyboard = [
             [InlineKeyboardButton(
-                'Vacuuming the Floor',
-                callback_data='Vacuuming the Floor'
-            )],
-            [InlineKeyboardButton(
-                'Wiping the Tables',
-                callback_data='log Wiping the Tables'
-            )],
-            [InlineKeyboardButton(
-                'Chair Cleaning',
-                callback_data='log Chair Cleaning'
-            )],
-            [InlineKeyboardButton(
-                'Extractor Fan Cleaning',
-                callback_data='log Extractor Fan Cleaning'
-            )],
-            [InlineKeyboardButton(
-                'Cooker',
-                callback_data='log Cooker'
-            )],
-            [InlineKeyboardButton(
-                'Dishwasher Cleaning',
-                callback_data='log Dishwasher Cleaning'
-            )]
+                name,
+                callback_data=f'log {name}'
+            )] for name in self._note_handler.categories
         ]
+        keyboard.append([InlineKeyboardButton(
+            '/add new/',
+            callback_data='add_new')])
+
         return InlineKeyboardMarkup(keyboard)
 
     def log(self, update: Update, context: CallbackContext):
+        category = update.callback_query.data.split('log ')[1]
+        
+
         print(update.callback_query.data)
 
 
